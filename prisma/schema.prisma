@@ -1,0 +1,1113 @@
+// Nha Chung - Prisma schema
+// Scope: Auth + "Dashboard tổng quan" (minus AI) + "Cá nhân".
+// "Báo cáo minh bạch" section intentionally deferred.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  HIDDEN
+  DELETED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum IdType {
+  CCCD
+  CMND
+  PASSPORT
+  BIRTH_CERTIFICATE
+}
+
+enum VerificationStatus {
+  VERIFIED
+  PENDING
+  MISSING
+}
+
+enum VehicleType {
+  CAR
+  MOTORBIKE
+  BICYCLE
+  OTHER
+}
+
+enum NotificationCategory {
+  URGENT
+  MAINTENANCE
+  FINANCE
+  EVENT
+  COMMUNITY
+  ANNOUNCEMENT
+  SECURITY
+}
+
+enum NotificationIconType {
+  WARNING
+  INFO
+  LIGHTNING
+  DOCUMENT
+  CALENDAR
+  SHIELD
+  BELL
+}
+
+enum AttachmentType {
+  PDF
+  DOC
+  XLS
+  IMG
+}
+
+enum DocumentFileType {
+  PDF
+  DOCX
+  XLSX
+  PPTX
+  IMG
+  OTHER
+}
+
+enum FeedbackStatus {
+  PROCESSING // Đang xử lý
+  AWAITING // Chờ phản hồi
+  COMPLETED // Đã hoàn thành
+  REJECTED // Từ chối
+}
+
+enum FeedbackPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NewsCategory {
+  ANNOUNCEMENT // Thông báo BQT
+  EVENT // Sự kiện
+  MAINTENANCE // Bảo trì
+  COMMUNITY // Cộng đồng
+  EMERGENCY // Khẩn cấp
+}
+
+enum EventStatus {
+  UPCOMING
+  ONGOING
+  ENDED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PAID
+  UNPAID
+  OVERDUE
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+enum ActivityType {
+  FEEDBACK
+  SERVICE
+  DOCUMENT
+  NOTIFICATION
+  PAYMENT
+  OTHER
+}
+
+// ─────────────────────────────────────────────────────────────
+// Auth & Account
+// ─────────────────────────────────────────────────────────────
+
+model Account {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  password     String
+  status       AccountStatus @default(ACTIVE)
+  companyName  String?       @map("company_name")
+  fullName     String        @map("full_name")
+  referralCode String?       @map("referral_code") // code entered at signup (referred-by)
+
+  // 1-1 profile (FK lives on account per spec: accounts.profile_id)
+  profileId String?         @unique @map("profile_id")
+  profile   AccountProfile? @relation(fields: [profileId], references: [id])
+
+  settings        AccountSettings?
+  sessions        Session[]
+  memberships     AccountBuilding[]
+  feedbacks       Feedback[]
+  notificationReads NotificationRead[]
+  activityLogs    ActivityLog[]
+  notifications   Notification[]   @relation("AuthoredNotifications")
+  news            News[]           @relation("AuthoredNews")
+  uploadedDocuments Document[]     @relation("UploadedDocuments")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("accounts")
+}
+
+model AccountProfile {
+  id        String  @id @default(cuid())
+  account   Account? // back-relation (FK on Account)
+
+  avatarUrl         String?  @map("avatar_url")
+  fullName          String   @map("full_name")
+  displayName       String?  @map("display_name")
+  dateOfBirth       DateTime? @map("date_of_birth")
+  gender            Gender?
+  nationality       String?
+  occupation        String?
+  permanentAddress  String?  @map("permanent_address")
+  location          String?
+  isVerifiedResident Boolean @default(false) @map("is_verified_resident")
+  completionPercentage Int    @default(0) @map("completion_percentage")
+
+  // Identification
+  idType        IdType?  @map("id_type")
+  idNumber      String?  @map("id_number")
+  idVerified    Boolean  @default(false) @map("id_verified")
+  idIssueDate   DateTime? @map("id_issue_date")
+  idIssueLocation String? @map("id_issue_location")
+  idFrontUrl    String?  @map("id_front_url")
+  idBackUrl     String?  @map("id_back_url")
+
+  // Contact
+  phoneNumber    String?  @map("phone_number")
+  phoneVerified  Boolean  @default(false) @map("phone_verified")
+  secondaryPhone String?  @map("secondary_phone")
+  email          String?
+  emailVerified  Boolean  @default(false) @map("email_verified")
+  zaloNumber     String?  @map("zalo_number")
+  zaloLinked     Boolean  @default(false) @map("zalo_linked")
+
+  vehicles          Vehicle[]
+  emergencyContacts EmergencyContact[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("account_profiles")
+}
+
+model Vehicle {
+  id              String       @id @default(cuid())
+  profileId       String?      @map("profile_id")
+  profile         AccountProfile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  memberId        String?      @map("member_id")
+  member          FamilyMember? @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  vehicleName     String?      @map("vehicle_name")
+  licensePlate    String       @map("license_plate")
+  vehicleType     VehicleType  @map("vehicle_type")
+  parkingLocation String?      @map("parking_location")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("vehicles")
+}
+
+model EmergencyContact {
+  id           String  @id @default(cuid())
+  profileId    String  @map("profile_id")
+  profile      AccountProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  contactName  String  @map("contact_name")
+  relationship String?
+  location     String?
+  phoneNumber  String  @map("phone_number")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("emergency_contacts")
+}
+
+model ActivityLog {
+  id        String       @id @default(cuid())
+  accountId String       @map("account_id")
+  account   Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type      ActivityType @default(OTHER)
+  text      String
+  color     String?
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  @@index([accountId])
+  @@map("activity_logs")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  accountId    String   @map("account_id")
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  refreshTokenHash String @map("refresh_token_hash")
+  deviceName   String?  @map("device_name")
+  deviceOs     String?  @map("device_os")
+  userAgent    String?  @map("user_agent")
+  ip           String?
+  location     String?
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+  expiresAt    DateTime @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([accountId])
+  @@map("sessions")
+}
+
+model AccountSettings {
+  id          String  @id @default(cuid())
+  accountId   String  @unique @map("account_id")
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  language    String  @default("vi")
+  theme       Theme   @default(LIGHT)
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  passwordChangedAt DateTime? @map("password_changed_at")
+
+  notificationSettings AccountNotificationSetting[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("account_settings")
+}
+
+model AccountNotificationSetting {
+  id          String  @id @default(cuid())
+  settingsId  String  @map("settings_id")
+  settings    AccountSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  key         String  // e.g. "fee", "maintenance", "emergency", "event", "document"
+  label       String
+  description String?
+  isEnabled   Boolean @default(true) @map("is_enabled")
+  isLocked    Boolean @default(false) @map("is_locked")
+
+  @@unique([settingsId, key])
+  @@map("account_notification_settings")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Buildings, Apartments & membership
+// ─────────────────────────────────────────────────────────────
+
+model Building {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String? @unique
+  location    String?
+  address     String?
+  thumbnailUrl String? @map("thumbnail_url")
+  description String?
+  status      String  @default("active")
+
+  memberships  AccountBuilding[]
+  apartments   Apartment[]
+  notifications Notification[]
+  documents    Document[]
+  documentCategories DocumentCategory[]
+  feedbacks    Feedback[]
+  news         News[]
+  events       Event[]
+  communityPosts CommunityPost[]
+
+  // ── Transparency section ──
+  financialPeriods FinancialPeriod[]
+  transactions     Transaction[]
+  maintenanceFund  MaintenanceFund?
+  fundPeriods      FundPeriod[]
+  blockCollections BlockCollection[]
+  maintenanceJobs  MaintenanceJob[]
+  workOrders       WorkOrder[]
+  buildingSystems  BuildingSystem[]
+  kpiPeriods       KpiPeriod[]
+  boardMembers     BoardMember[]
+  reports          Report[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("buildings")
+}
+
+// Which buildings an account belongs to / explores. Active building marks current selection.
+model AccountBuilding {
+  id          String  @id @default(cuid())
+  accountId   String  @map("account_id")
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  apartmentId String?  @map("apartment_id")
+  apartment   Apartment? @relation(fields: [apartmentId], references: [id])
+
+  isOwner   Boolean @default(false) @map("is_owner")
+  isActive  Boolean @default(false) @map("is_active")
+  role      String  @default("resident") // resident | admin | manager
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  @@unique([accountId, buildingId])
+  @@index([buildingId])
+  @@map("account_buildings")
+}
+
+model Apartment {
+  id          String  @id @default(cuid())
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  code        String  // e.g. A-12.05
+  block       String? // Tháp A
+  floor       Int?
+  totalFloors Int?    @map("total_floors")
+  areaSqm     Float?  @map("area_sqm")
+  totalAreaSqm Float? @map("total_area_sqm") // including walls
+  bedrooms    Int?
+  bathrooms   Int?
+  balconies   Int?
+  orientation String?
+  furnishingStatus String? @map("furnishing_status")
+  ownershipType String? @map("ownership_type")
+  parkingLocations String? @map("parking_locations")
+  status      String  @default("active")
+  moveInDate  DateTime? @map("move_in_date")
+
+  memberships AccountBuilding[]
+  contract    ApartmentContract?
+  fees        ApartmentFee[]
+  familyMembers FamilyMember[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([buildingId, code])
+  @@map("apartments")
+}
+
+model ApartmentContract {
+  id            String  @id @default(cuid())
+  apartmentId   String  @unique @map("apartment_id")
+  apartment     Apartment @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  contractNumber String @map("contract_number")
+  ownershipType String? @map("ownership_type")
+  contractDate  DateTime? @map("contract_date")
+  handoverDate  DateTime? @map("handover_date")
+  ownerName     String? @map("owner_name")
+  registrationStatus String? @map("registration_status") // Đã cấp sổ hồng
+  documentUrl   String? @map("document_url")
+
+  @@map("apartment_contracts")
+}
+
+model ApartmentFee {
+  id          String  @id @default(cuid())
+  apartmentId String  @map("apartment_id")
+  apartment   Apartment @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  period      String  // "2024-05"
+  name        String
+  amount      Int     // VND
+  status      PaymentStatus @default(UNPAID)
+  dueDate     DateTime? @map("due_date")
+  paidAt      DateTime? @map("paid_at")
+
+  @@index([apartmentId, period])
+  @@map("apartment_fees")
+}
+
+model FamilyMember {
+  id          String  @id @default(cuid())
+  apartmentId String  @map("apartment_id")
+  apartment   Apartment @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+
+  name        String
+  avatarUrl   String? @map("avatar_url")
+  role        String? // Chủ hộ, Vợ, Con trai...
+  gender      Gender?
+  dateOfBirth DateTime? @map("date_of_birth")
+  isOwner     Boolean @default(false) @map("is_owner")
+  phoneNumber String? @map("phone_number")
+  phoneVerified Boolean @default(false) @map("phone_verified")
+  contactType String? @map("contact_type") // "Qua phụ huynh"
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  notes       String?
+
+  documents   FamilyMemberDocument[]
+  vehicles    Vehicle[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([apartmentId])
+  @@map("family_members")
+}
+
+model FamilyMemberDocument {
+  id        String  @id @default(cuid())
+  memberId  String  @map("member_id")
+  member    FamilyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  type      IdType
+  number    String?
+  status    VerificationStatus @default(PENDING)
+  fileUrl   String? @map("file_url")
+
+  @@map("family_member_documents")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  eyebrow    String? // "THÔNG BÁO"
+  title      String
+  category   NotificationCategory @default(ANNOUNCEMENT)
+  iconType   NotificationIconType @default(BELL) @map("icon_type")
+  isUrgent   Boolean @default(false) @map("is_urgent")
+
+  // Author (can be a managed account or free-text board)
+  authorId   String? @map("author_id")
+  author     Account? @relation("AuthoredNotifications", fields: [authorId], references: [id])
+  authorName String? @map("author_name")
+  authorRole String? @map("author_role")
+  authorVerified Boolean @default(true) @map("author_verified")
+
+  // Rich detail content
+  body       Json?   // string[] paragraphs
+  timeCard   Json?   @map("time_card") // { heading, rows[] }
+  checklist  Json?   // string[]
+  alertText  String? @map("alert_text")
+  signoff    Json?   // { lines[], signedBy, title }
+
+  viewCount  Int     @default(0) @map("view_count")
+  publishedAt DateTime @default(now()) @map("published_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  attachments NotificationAttachment[]
+  reads       NotificationRead[]
+
+  @@index([buildingId, category])
+  @@index([buildingId, isUrgent])
+  @@map("notifications")
+}
+
+model NotificationAttachment {
+  id             String  @id @default(cuid())
+  notificationId String  @map("notification_id")
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  name           String
+  type           AttachmentType @default(PDF)
+  sizeBytes      Int?    @map("size_bytes")
+  url            String
+
+  @@map("notification_attachments")
+}
+
+// Per-account read state ("đã đọc / chưa đọc")
+model NotificationRead {
+  id             String  @id @default(cuid())
+  notificationId String  @map("notification_id")
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  accountId      String  @map("account_id")
+  account        Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  readAt         DateTime @default(now()) @map("read_at")
+
+  @@unique([notificationId, accountId])
+  @@index([accountId])
+  @@map("notification_reads")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Documents (Kho tài liệu)
+// ─────────────────────────────────────────────────────────────
+
+model DocumentCategory {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  name       String
+  iconUrl    String? @map("icon_url")
+  documents  Document[]
+
+  @@unique([buildingId, name])
+  @@map("document_categories")
+}
+
+model Document {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  categoryId String? @map("category_id")
+  category   DocumentCategory? @relation(fields: [categoryId], references: [id])
+
+  name       String
+  fileType   DocumentFileType @default(PDF) @map("file_type")
+  sizeBytes  Int?    @map("size_bytes")
+  url        String
+  viewCount  Int     @default(0) @map("view_count")
+
+  // Archive (Lịch sử & lưu trữ) view fields
+  archiveCategory ArchiveCategory? @map("archive_category")
+  downloadCount   Int     @default(0) @map("download_count")
+  uploadedById    String? @map("uploaded_by_id")
+  uploadedBy      Account? @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([buildingId, categoryId])
+  @@index([buildingId, archiveCategory])
+  @@map("documents")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Feedback (Góp ý / Phản ánh)
+// ─────────────────────────────────────────────────────────────
+
+model Feedback {
+  id          String  @id @default(cuid())
+  code        String  @unique // #PA-240525-0012
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  accountId   String? @map("account_id")
+  account     Account? @relation(fields: [accountId], references: [id])
+
+  category    String
+  title       String
+  description String?
+  priority    FeedbackPriority @default(MEDIUM)
+  location    String?
+  status      FeedbackStatus   @default(PROCESSING)
+
+  images      FeedbackImage[]
+  history     FeedbackHistory[]
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([buildingId, status])
+  @@map("feedbacks")
+}
+
+model FeedbackImage {
+  id         String  @id @default(cuid())
+  feedbackId String  @map("feedback_id")
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  url        String
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  @@map("feedback_images")
+}
+
+model FeedbackHistory {
+  id          String  @id @default(cuid())
+  feedbackId  String  @map("feedback_id")
+  feedback    Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  label       String
+  description String?
+  status      FeedbackStatus?
+  actorName   String? @map("actor_name")
+  completed   Boolean @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([feedbackId])
+  @@map("feedback_history")
+}
+
+// ─────────────────────────────────────────────────────────────
+// News (Tin tức cộng đồng)
+// ─────────────────────────────────────────────────────────────
+
+model News {
+  id          String  @id @default(cuid())
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  title       String
+  excerpt     String?
+  content     String?
+  thumbnailUrl String? @map("thumbnail_url")
+  category    NewsCategory @default(ANNOUNCEMENT)
+  tags        Json?   // string[]
+  isPinned    Boolean @default(false) @map("is_pinned")
+  readMinutes Int?    @map("read_minutes")
+  viewCount   Int     @default(0) @map("view_count")
+
+  authorId    String? @map("author_id")
+  author      Account? @relation("AuthoredNews", fields: [authorId], references: [id])
+  authorName  String? @map("author_name")
+  authorLabel String? @map("author_label") // "BQT", "KT"
+
+  publishedAt DateTime @default(now()) @map("published_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([buildingId, category])
+  @@map("news")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Events (Sự kiện)
+// ─────────────────────────────────────────────────────────────
+
+model Event {
+  id          String  @id @default(cuid())
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  title       String
+  content     String?
+  startAt     DateTime @map("start_at")
+  endAt       DateTime? @map("end_at")
+  location    String?
+  regulations String?
+  status      EventStatus @default(UPCOMING)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([buildingId, startAt])
+  @@map("events")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Community posts (Hoạt động cộng đồng - dashboard)
+// ─────────────────────────────────────────────────────────────
+
+model CommunityPost {
+  id          String  @id @default(cuid())
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  title       String
+  content     String?
+  thumbnailUrl String? @map("thumbnail_url")
+  viewCount   Int     @default(0) @map("view_count")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([buildingId])
+  @@map("community_posts")
+}
+
+// ═════════════════════════════════════════════════════════════
+// Báo cáo minh bạch (Transparency) section
+// Money fields use BigInt (VND amounts exceed Int32). A toJSON
+// shim in main.ts serialises BigInt as a JSON number.
+// ═════════════════════════════════════════════════════════════
+
+enum TrendDirection {
+  UP
+  DOWN
+  NEUTRAL
+}
+
+enum LineItemKind {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum WorkOrderStatus {
+  PROCESSING // Đang xử lý
+  COMPLETED // Hoàn thành
+  OVERDUE // Quá hạn
+}
+
+enum WorkOrderPriority {
+  HIGH // Khẩn cấp
+  MEDIUM // Trung bình
+  LOW // Thấp
+}
+
+enum WorkOrderCategory {
+  ELECTRICITY // Điện
+  WATER // Nước
+  ELEVATOR // Thang máy
+  FIRE_SAFETY // PCCC
+  COMMON_AREA // Khu chung
+  OTHER
+}
+
+enum SystemStatus {
+  NORMAL // Bình thường
+  MAINTENANCE // Bảo trì
+  WARNING
+}
+
+enum MaintenanceJobStatus {
+  COMPLETED // Hoàn thành
+  IN_PROGRESS // Đang thực hiện
+  PLANNED // Đã lên KH
+  TENTATIVE // Dự kiến
+}
+
+enum KpiGrade {
+  EXCELLENT // Xuất sắc
+  GOOD // Tốt
+  NEEDS_IMPROVEMENT // Cần cải thiện
+}
+
+enum KpiResultBadge {
+  EXCEEDED // Vượt
+  ACHIEVED // Đạt
+  NEEDS_IMPROVEMENT // Cần cải thiện
+}
+
+enum ReportPeriodType {
+  MONTH
+  QUARTER
+  YEAR
+}
+
+enum ReportStatus {
+  DRAFT // Chưa soạn
+  PENDING // Chờ duyệt
+  PUBLISHED // Đã phát hành
+}
+
+enum ArchiveCategory {
+  FINANCE // Tài chính
+  OPERATIONS // Vận hành
+  SECURITY // An ninh
+  BOARD // Ban quản trị
+  MAINTENANCE // Bảo trì
+}
+
+// ── Tài chính (tai-chinh + thu-chi) ──────────────────────────
+
+// One row per building per month: pre-aggregated totals + ratios.
+model FinancialPeriod {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  period     String  // "2024-05"
+
+  totalIncome   BigInt @map("total_income")
+  totalExpense  BigInt @map("total_expense")
+  surplus       BigInt
+  // comparison vs previous period
+  incomeChangePct  Float? @map("income_change_pct")
+  expenseChangePct Float? @map("expense_change_pct")
+  surplusChangePct Float? @map("surplus_change_pct")
+
+  // ratios / collection
+  collectionRate Float? @map("collection_rate") // 98.6
+  expenseRatio   Float? @map("expense_ratio")   // 75.2
+  fundUsageRate  Float? @map("fund_usage_rate")  // 0
+  collectionRateChangePct Float? @map("collection_rate_change_pct")
+  expenseRatioChangePct   Float? @map("expense_ratio_change_pct")
+  unitsPaid      Int?   @map("units_paid")
+  unitsTotal     Int?   @map("units_total")
+
+  lineItems  FinancialLineItem[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([buildingId, period])
+  @@map("financial_periods")
+}
+
+// Income/expense breakdown rows (donut + detail tables).
+model FinancialLineItem {
+  id        String  @id @default(cuid())
+  periodId  String  @map("period_id")
+  period    FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  kind       LineItemKind
+  name       String   // "Vận hành & quản lý"
+  category   String?  // OPERATION / UTILITIES ...
+  amount     BigInt
+  pctOfTotal Float    @map("pct_of_total")
+  comparisonPct Float? @map("comparison_pct")
+  comparisonDirection TrendDirection? @map("comparison_direction")
+  subInfo    String?  @map("sub_info") // "Đạt 98.6% kế hoạch • 856/868 căn hộ"
+  color      String?
+  sortOrder  Int      @default(0) @map("sort_order")
+
+  @@index([periodId, kind])
+  @@map("financial_line_items")
+}
+
+// Transaction ledger (thu-chi recent transactions).
+model Transaction {
+  id          String  @id @default(cuid())
+  code        String  @unique // #GD-240525-038
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  type        TransactionType
+  category    String  // "Phí quản lý", "Bảo trì", ...
+  description String
+  subInfo     String? @map("sub_info")
+  vendorName  String? @map("vendor_name")
+  contractRef String? @map("contract_ref")
+  paymentMethod String? @map("payment_method") // "Chuyển khoản"
+  amount      BigInt  // positive magnitude; sign implied by `type`
+  occurredAt  DateTime @map("occurred_at")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([buildingId, occurredAt])
+  @@index([buildingId, type])
+  @@map("transactions")
+}
+
+// ── Quỹ bảo trì (quy-bao-tri) ────────────────────────────────
+
+model MaintenanceFund {
+  id         String  @id @default(cuid())
+  buildingId String  @unique @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  balance        BigInt
+  totalCollected BigInt @map("total_collected")
+  totalSpent     BigInt @map("total_spent")
+  interestIncome BigInt @map("interest_income")
+  balanceChangePct Float? @map("balance_change_pct")
+  collectedChangePct Float? @map("collected_change_pct")
+  spentChangePct Float? @map("spent_change_pct")
+
+  bankName        String? @map("bank_name")
+  accountNoMasked String? @map("account_no_masked")
+  interestRate    Float?  @map("interest_rate")    // 6.5 (%/năm)
+  contributionRate String? @map("contribution_rate") // "2% giá trị HĐ"
+
+  collectionRate Float? @map("collection_rate")
+  unitsPaid      Int?   @map("units_paid")
+  unitsTotal     Int?   @map("units_total")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("maintenance_funds")
+}
+
+// Fund balance movement chart (quarterly/monthly).
+model FundPeriod {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  period     String  // "2024-Q2" / "2024-05"
+  cumulativeBalance BigInt @map("cumulative_balance")
+  maintenanceCost   BigInt @map("maintenance_cost")
+  sortOrder  Int @default(0) @map("sort_order")
+
+  @@unique([buildingId, period])
+  @@map("fund_periods")
+}
+
+// Fund collection by block (per period).
+model BlockCollection {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  period     String  // "2024-05"
+  block      String  // "Block A"
+  unitsPaid  Int     @map("units_paid")
+  unitsTotal Int     @map("units_total")
+
+  @@index([buildingId, period])
+  @@map("block_collections")
+}
+
+// Unified maintenance jobs: recent expenses + upcoming plans + schedule.
+model MaintenanceJob {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  name        String
+  category    String? // optional grouping
+  contractor  String?
+  status      MaintenanceJobStatus
+  amount      BigInt? // actual cost (completed)
+  estimatedCost BigInt? @map("estimated_cost") // planned
+  scheduledPeriod String? @map("scheduled_period") // "Tháng 6/2024" / "Q4/2024"
+  scheduledAt DateTime? @map("scheduled_at") // for week schedule
+  actualDate  DateTime? @map("actual_date")
+  fundFinanced Boolean @default(true) @map("fund_financed")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([buildingId, status])
+  @@map("maintenance_jobs")
+}
+
+// ── Vận hành (van-hanh) ──────────────────────────────────────
+
+model WorkOrder {
+  id          String  @id @default(cuid())
+  code        String  @unique // #YC-2405-047
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  name        String
+  category    WorkOrderCategory
+  status      WorkOrderStatus @default(PROCESSING)
+  priority    WorkOrderPriority @default(MEDIUM)
+  requesterName String? @map("requester_name")
+  requesterInitials String? @map("requester_initials")
+  overdueDays Int?    @map("overdue_days")
+  occurredAt  DateTime @map("occurred_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([buildingId, status])
+  @@map("work_orders")
+}
+
+model BuildingSystem {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  name       String
+  detail     String?
+  status     SystemStatus @default(NORMAL)
+  metric     String? // "98%", "Bình thường"
+  lastCheckedAt DateTime? @map("last_checked_at")
+  sortOrder  Int @default(0) @map("sort_order")
+
+  @@map("building_systems")
+}
+
+// ── KPI BQT (kpi) ────────────────────────────────────────────
+
+model KpiPeriod {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  period     String  // "2024-Q2"
+  periodLabel String @map("period_label") // "Quý 2/2024"
+
+  totalScore  Float  @map("total_score")
+  maxScore    Float  @default(100) @map("max_score")
+  grade       KpiGrade
+  targetScore Float  @map("target_score")
+  scoreChange Float? @map("score_change")
+  comparisonPeriod String? @map("comparison_period")
+
+  achievedCount        Int @default(0) @map("achieved_count")
+  needsImprovementCount Int @default(0) @map("needs_improvement_count")
+  notAchievedCount     Int @default(0) @map("not_achieved_count")
+  totalMetrics         Int @default(0) @map("total_metrics")
+
+  categories KpiCategory[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([buildingId, period])
+  @@map("kpi_periods")
+}
+
+model KpiCategory {
+  id        String  @id @default(cuid())
+  periodId  String  @map("period_id")
+  period    KpiPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  name      String  // "Tài chính"
+  color     String?
+  score     Float
+  maxScore  Float   @default(100) @map("max_score")
+  metricsPassed Int  @map("metrics_passed")
+  metricsTotal  Int  @map("metrics_total")
+  grade     KpiGrade
+  sortOrder Int     @default(0) @map("sort_order")
+
+  metrics   KpiMetric[]
+
+  @@index([periodId])
+  @@map("kpi_categories")
+}
+
+model KpiMetric {
+  id          String  @id @default(cuid())
+  categoryId  String  @map("category_id")
+  category    KpiCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String  // "Tỉ lệ thu phí quản lý"
+  unit        String? // "% căn hộ đóng đúng hạn"
+  targetValue String? @map("target_value") // "≥ 95%"
+  actualValue String? @map("actual_value") // "98.6%"
+  statusColor String? @map("status_color") // green/orange/red
+  achievementPct Float? @map("achievement_pct")
+  pointsEarned Float?  @map("points_earned")
+  pointsMax    Float?  @map("points_max")
+  resultBadge  KpiResultBadge? @map("result_badge")
+  sortOrder    Int     @default(0) @map("sort_order")
+
+  @@index([categoryId])
+  @@map("kpi_metrics")
+}
+
+model BoardMember {
+  id         String  @id @default(cuid())
+  buildingId String  @map("building_id")
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  name       String  // "Ông Nguyễn Thanh Bình"
+  initials   String?
+  role       String  // "Chủ tịch BQT"
+  score      Float?  // current-period KPI score
+  grade      KpiGrade?
+  termStart  Int?    @map("term_start")
+  termEnd    Int?    @map("term_end")
+  avatarColor String? @map("avatar_color")
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  @@index([buildingId])
+  @@map("board_members")
+}
+
+// ── Báo cáo định kỳ (bao-cao) ────────────────────────────────
+
+model Report {
+  id          String  @id @default(cuid())
+  buildingId  String  @map("building_id")
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  title       String
+  periodType  ReportPeriodType @map("period_type")
+  periodLabel String  @map("period_label") // "Tháng 5/2024" / "Quý 1/2024" / "2023"
+  status      ReportStatus @default(DRAFT)
+  category    ArchiveCategory? // financial / operations ...
+
+  fileType    DocumentFileType? @map("file_type")
+  sizeBytes   Int?    @map("size_bytes")
+  url         String?
+
+  responsibleName String? @map("responsible_name")
+  dueDate     DateTime? @map("due_date")
+  publishedAt DateTime? @map("published_at")
+  viewCount   Int     @default(0) @map("view_count")
+  downloadCount Int    @default(0) @map("download_count")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([buildingId, periodType])
+  @@index([buildingId, status])
+  @@map("reports")
+}
