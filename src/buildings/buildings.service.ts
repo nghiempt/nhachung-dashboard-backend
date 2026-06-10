@@ -26,6 +26,7 @@ export class BuildingsService {
       isOwned: true,
       isOwner: m.isOwner,
       isActive: m.isActive,
+      role: m.role,
     }));
 
     const explore = allBuildings
@@ -39,6 +40,7 @@ export class BuildingsService {
         isOwned: false,
         isOwner: false,
         isActive: false,
+        role: null as string | null,
       }));
 
     const active = mine.find((b) => b.isActive) ?? mine[0] ?? null;
