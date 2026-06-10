@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
@@ -28,6 +29,8 @@ import { KpiModule } from './kpi/kpi.module';
 import { ReportsModule } from './reports/reports.module';
 import { OperationsModule } from './operations/operations.module';
 import { ArchiveModule } from './archive/archive.module';
+import { AdminModule } from './admin/admin.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -55,12 +58,18 @@ import { ArchiveModule } from './archive/archive.module';
     ReportsModule,
     OperationsModule,
     ArchiveModule,
+    AdminModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
 })
