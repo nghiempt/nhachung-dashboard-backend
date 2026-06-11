@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Injectable,
   NotFoundException,
@@ -15,6 +16,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { paginate, PaginationDto } from '../../common/dto/pagination.dto';
 import { Roles, ADMIN_ROLES } from '../../common/decorators/roles.decorator';
 import { AdminBuilding } from '../../common/decorators/admin-building.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 const ALL_ROLES = ['resident', ...ADMIN_ROLES] as const;
 
@@ -69,11 +71,21 @@ export class AdminRolesService {
     return counts;
   }
 
-  async setRole(buildingId: string, id: string, role: string) {
+  async setRole(
+    buildingId: string,
+    id: string,
+    role: string,
+    currentAccountId: string,
+  ) {
     const m = await this.prisma.accountBuilding.findFirst({
       where: { id, buildingId },
     });
     if (!m) throw new NotFoundException('Không tìm thấy thành viên');
+    // Prevent an admin from changing their own role (e.g. self-demotion that
+    // would lock them out of the admin area).
+    if (m.accountId === currentAccountId) {
+      throw new ForbiddenException('Không thể tự thay đổi vai trò của chính mình');
+    }
     return this.prisma.accountBuilding.update({ where: { id }, data: { role } });
   }
 }
@@ -101,9 +113,10 @@ export class AdminRolesController {
   @ApiOperation({ summary: 'Gán vai trò' })
   setRole(
     @AdminBuilding() buildingId: string,
+    @CurrentUser('accountId') accountId: string,
     @Param('id') id: string,
     @Body() dto: SetMemberRoleDto,
   ) {
-    return this.service.setRole(buildingId, id, dto.role);
+    return this.service.setRole(buildingId, id, dto.role, accountId);
   }
 }

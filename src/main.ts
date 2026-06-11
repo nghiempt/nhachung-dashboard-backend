@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 // VND money fields use Prisma BigInt; serialise them as JSON numbers
@@ -17,12 +18,19 @@ async function bootstrap() {
   const apiPrefix = config.get<string>('API_PREFIX', 'api');
   app.setGlobalPrefix(apiPrefix);
 
+  // Cap JSON / urlencoded payloads. File uploads go through multipart (multer
+  // enforces its own 10MB limit), so request bodies here only carry metadata.
+  app.use(json({ limit: '2mb' }));
+  app.use(urlencoded({ extended: true, limit: '2mb' }));
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
       transformOptions: { enableImplicitConversion: true },
-      forbidNonWhitelisted: false,
+      // Reject unexpected body fields instead of silently dropping them, so
+      // typos / stale clients surface as a clear 400 rather than a no-op.
+      forbidNonWhitelisted: true,
     }),
   );
 

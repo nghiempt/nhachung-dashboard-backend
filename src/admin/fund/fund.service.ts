@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { paginate } from '../../common/dto/pagination.dto';
 import { CreateJobDto, QueryJobsDto, UpdateJobDto } from './dto/fund.dto';
 
 @Injectable()
@@ -17,11 +18,22 @@ export class AdminFundService {
   async listJobs(buildingId: string, query: QueryJobsDto) {
     const where: Prisma.MaintenanceJobWhereInput = { buildingId };
     if (query.status) where.status = query.status;
-    const rows = await this.prisma.maintenanceJob.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-    });
-    return rows.map((j) => ({
+    if (query.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { contractor: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.maintenanceJob.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: query.skip,
+        take: query.limit,
+      }),
+      this.prisma.maintenanceJob.count({ where }),
+    ]);
+    const items = rows.map((j) => ({
       id: j.id,
       name: j.name,
       category: j.category,
@@ -34,6 +46,7 @@ export class AdminFundService {
       actualDate: j.actualDate,
       fundFinanced: j.fundFinanced,
     }));
+    return paginate(items, total, query.page, query.limit);
   }
 
   async createJob(buildingId: string, dto: CreateJobDto) {

@@ -18,18 +18,18 @@ export class FeedbacksService {
     const bId = await this.ctx.resolve(accountId, buildingId);
     const [all, processing, awaiting, completed, rejected] =
       await this.prisma.$transaction([
-        this.prisma.feedback.count({ where: { buildingId: bId } }),
+        this.prisma.feedback.count({ where: { buildingId: bId, accountId } }),
         this.prisma.feedback.count({
-          where: { buildingId: bId, status: FeedbackStatus.PROCESSING },
+          where: { buildingId: bId, accountId, status: FeedbackStatus.PROCESSING },
         }),
         this.prisma.feedback.count({
-          where: { buildingId: bId, status: FeedbackStatus.AWAITING },
+          where: { buildingId: bId, accountId, status: FeedbackStatus.AWAITING },
         }),
         this.prisma.feedback.count({
-          where: { buildingId: bId, status: FeedbackStatus.COMPLETED },
+          where: { buildingId: bId, accountId, status: FeedbackStatus.COMPLETED },
         }),
         this.prisma.feedback.count({
-          where: { buildingId: bId, status: FeedbackStatus.REJECTED },
+          where: { buildingId: bId, accountId, status: FeedbackStatus.REJECTED },
         }),
       ]);
     return {
@@ -46,7 +46,7 @@ export class FeedbacksService {
   async list(accountId: string, query: QueryFeedbacksDto) {
     const buildingId = await this.ctx.resolve(accountId, query.buildingId);
 
-    const where: Prisma.FeedbackWhereInput = { buildingId };
+    const where: Prisma.FeedbackWhereInput = { buildingId, accountId };
     if (query.status) where.status = query.status;
     if (query.search)
       where.title = { contains: query.search, mode: 'insensitive' };
@@ -80,7 +80,7 @@ export class FeedbacksService {
   async detail(accountId: string, id: string) {
     const buildingId = await this.ctx.resolve(accountId);
     const f = await this.prisma.feedback.findFirst({
-      where: { id, buildingId },
+      where: { id, buildingId, accountId },
       include: {
         images: { orderBy: { sortOrder: 'asc' } },
         history: { orderBy: { createdAt: 'asc' } },

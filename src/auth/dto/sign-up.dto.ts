@@ -4,6 +4,8 @@ import {
   IsEmail,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 
@@ -15,6 +17,11 @@ export class SignUpDto {
   @ApiProperty({ example: 'Default@123', minLength: 8 })
   @IsString()
   @MinLength(8)
+  @MaxLength(72) // bcrypt only hashes the first 72 bytes
+  @Matches(/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d])/, {
+    message:
+      'Mật khẩu phải có chữ hoa, chữ thường, số và ký tự đặc biệt',
+  })
   password: string;
 
   @ApiProperty({ example: 'Trần Hoàng Chris' })

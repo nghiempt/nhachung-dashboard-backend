@@ -10,8 +10,9 @@ import {
 } from 'class-validator';
 import { MaintenanceJobStatus } from '@prisma/client';
 import { ToUpper } from '../../../common/decorators/to-upper';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
-export class QueryJobsDto {
+export class QueryJobsDto extends PaginationDto {
   @ApiPropertyOptional({ enum: MaintenanceJobStatus })
   @IsOptional()
   @ToUpper()

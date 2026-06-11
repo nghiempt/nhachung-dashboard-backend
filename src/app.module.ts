@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, seconds } from '@nestjs/throttler';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { AccountThrottlerGuard } from './common/guards/account-throttler.guard';
 
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
@@ -35,6 +37,11 @@ import { AiModule } from './ai/ai.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Global rate limiting. A generous default protects every endpoint; the
+    // sensitive auth and AI endpoints set tighter per-route limits via @Throttle.
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: seconds(60), limit: 120 },
+    ]),
     PrismaModule,
     StorageModule,
     CommonModule,
@@ -63,9 +70,15 @@ import { AiModule } from './ai/ai.module';
   ],
   controllers: [AppController],
   providers: [
+    // Order matters: authenticate first so the throttler can key limits by
+    // account; the throttler then runs before role checks.
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AccountThrottlerGuard,
     },
     {
       provide: APP_GUARD,

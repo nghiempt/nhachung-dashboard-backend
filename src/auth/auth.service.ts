@@ -67,7 +67,8 @@ export class AuthService {
   async signIn(dto: SignInDto, device: DeviceContext) {
     const email = dto.email.toLowerCase().trim();
     const account = await this.prisma.account.findUnique({ where: { email } });
-    if (!account || account.status === 'DELETED') {
+    // Treat DELETED/HIDDEN as non-existent to avoid leaking account state.
+    if (!account || account.status === 'DELETED' || account.status === 'HIDDEN') {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
     const ok = await bcrypt.compare(dto.password, account.password);

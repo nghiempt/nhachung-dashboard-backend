@@ -86,6 +86,23 @@ export class UpdateReportDto {
   @IsString()
   title?: string;
 
+  @ApiPropertyOptional({ enum: ReportPeriodType })
+  @IsOptional()
+  @ToUpper()
+  @IsIn(Object.values(ReportPeriodType))
+  periodType?: ReportPeriodType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  periodLabel?: string;
+
+  @ApiPropertyOptional({ enum: ArchiveCategory })
+  @IsOptional()
+  @ToUpper()
+  @IsIn(Object.values(ArchiveCategory))
+  category?: ArchiveCategory;
+
   @ApiPropertyOptional({ enum: ReportStatus })
   @IsOptional()
   @ToUpper()
@@ -160,6 +177,9 @@ export class AdminReportsService {
       where: { id },
       data: {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.periodType !== undefined ? { periodType: dto.periodType } : {}),
+        ...(dto.periodLabel !== undefined ? { periodLabel: dto.periodLabel } : {}),
+        ...(dto.category !== undefined ? { category: dto.category } : {}),
         ...(dto.responsibleName !== undefined
           ? { responsibleName: dto.responsibleName }
           : {}),

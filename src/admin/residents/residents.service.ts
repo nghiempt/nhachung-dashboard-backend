@@ -139,6 +139,7 @@ export class AdminResidentsService {
       where: { email: dto.email },
       include: { profile: true },
     });
+    const reusedExistingAccount = !!account;
 
     if (!account) {
       const tempPassword = await bcrypt.hash(nanoid(16), 10);
@@ -178,8 +179,25 @@ export class AdminResidentsService {
         role: dto.role ?? 'resident',
         isOwner: dto.isOwner ?? false,
       },
-      include: { account: { include: { profile: true } }, apartment: true },
+      include: {
+        account: { include: { profile: true } },
+        apartment: true,
+        building: { select: { name: true } },
+      },
     });
+
+    // Notify the owner of a reused account that it was added to a new building,
+    // so the assignment isn't silent (the entry shows in their activity feed).
+    if (reusedExistingAccount) {
+      await this.prisma.activityLog.create({
+        data: {
+          accountId: account.id,
+          type: 'NOTIFICATION',
+          text: `Tài khoản của bạn đã được thêm vào tòa nhà ${membership.building.name}`,
+        },
+      });
+    }
+
     return this.toItem(membership);
   }
 

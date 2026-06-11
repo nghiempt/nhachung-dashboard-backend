@@ -1,5 +1,6 @@
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle, seconds } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/sign-up.dto';
@@ -21,6 +22,7 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: seconds(60) } })
   @Post('sign-up')
   @ApiOperation({ summary: 'Đăng ký tài khoản mới (tự động tạo profile)' })
   signUp(@Body() dto: SignUpDto, @Req() req: Request) {
@@ -28,6 +30,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: seconds(60) } })
   @Post('sign-in')
   @ApiOperation({ summary: 'Đăng nhập' })
   signIn(@Body() dto: SignInDto, @Req() req: Request) {
@@ -35,6 +38,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: seconds(60) } })
   @Post('refresh')
   @ApiOperation({ summary: 'Làm mới access token' })
   refresh(@Body() dto: RefreshDto, @Req() req: Request) {

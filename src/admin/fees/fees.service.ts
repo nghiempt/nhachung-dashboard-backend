@@ -132,31 +132,42 @@ export class AdminFeesService {
     return this.detail(buildingId, fee.id);
   }
 
-  /** Issue the same fee to every apartment in the building for a period. */
+  /**
+   * Issue the same fee to every apartment in the building for a period.
+   * Idempotent: the (apartmentId, period, name) unique constraint plus
+   * `skipDuplicates` make a double-submit safe — already-issued apartments are
+   * skipped instead of duplicated. Wrapped in a transaction so the read of
+   * existing rows and the insert are consistent.
+   */
   async issueAll(buildingId: string, dto: IssueAllDto) {
-    const apartments = await this.prisma.apartment.findMany({
-      where: { buildingId },
-      select: { id: true },
-    });
-    const existing = await this.prisma.apartmentFee.findMany({
-      where: { period: dto.period, name: dto.name, apartment: { buildingId } },
-      select: { apartmentId: true },
-    });
-    const skip = new Set(existing.map((e) => e.apartmentId));
-    const toCreate = apartments.filter((a) => !skip.has(a.id));
-
-    if (toCreate.length) {
-      await this.prisma.apartmentFee.createMany({
-        data: toCreate.map((a) => ({
-          apartmentId: a.id,
-          period: dto.period,
-          name: dto.name,
-          amount: dto.amount,
-          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-        })),
+    return this.prisma.$transaction(async (tx) => {
+      const apartments = await tx.apartment.findMany({
+        where: { buildingId },
+        select: { id: true },
       });
-    }
-    return { created: toCreate.length, skipped: skip.size };
+      const existing = await tx.apartmentFee.findMany({
+        where: { period: dto.period, name: dto.name, apartment: { buildingId } },
+        select: { apartmentId: true },
+      });
+      const skip = new Set(existing.map((e) => e.apartmentId));
+      const toCreate = apartments.filter((a) => !skip.has(a.id));
+
+      let created = 0;
+      if (toCreate.length) {
+        const res = await tx.apartmentFee.createMany({
+          data: toCreate.map((a) => ({
+            apartmentId: a.id,
+            period: dto.period,
+            name: dto.name,
+            amount: dto.amount,
+            dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+          })),
+          skipDuplicates: true,
+        });
+        created = res.count;
+      }
+      return { created, skipped: apartments.length - created };
+    });
   }
 
   async detail(buildingId: string, id: string) {

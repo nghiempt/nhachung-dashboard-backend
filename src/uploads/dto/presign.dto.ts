@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
+import { ALLOWED_UPLOAD_FOLDERS } from '../upload-folders';
 
 export class PresignDto {
   @ApiProperty({ example: 'avatar.png' })
@@ -13,9 +14,10 @@ export class PresignDto {
 
   @ApiPropertyOptional({
     example: 'avatars',
-    description: 'Logical folder (avatars, documents, feedback, notifications, id-cards)',
+    description: `Logical folder. One of: ${ALLOWED_UPLOAD_FOLDERS.join(', ')}`,
   })
   @IsOptional()
   @IsString()
+  @IsIn(ALLOWED_UPLOAD_FOLDERS as unknown as string[])
   folder?: string;
 }

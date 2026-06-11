@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Post,
   Query,
   UploadedFile,
@@ -18,6 +19,10 @@ import {
 import { nanoid } from 'nanoid';
 import { StorageService } from '../storage/storage.service';
 import { PresignDto } from './dto/presign.dto';
+import { ALLOWED_UPLOAD_FOLDERS } from './upload-folders';
+
+/** 10 MB hard cap on direct uploads to avoid storage abuse / DoS. */
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 @ApiTags('uploads')
 @ApiBearerAuth()
@@ -37,14 +42,20 @@ export class UploadsController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }),
+  )
   async upload(
     @UploadedFile() file: Express.Multer.File,
     @Query('folder') folder?: string,
   ) {
     if (!file) throw new BadRequestException('Thiếu file');
+    const resolvedFolder = folder ?? 'misc';
+    if (!ALLOWED_UPLOAD_FOLDERS.includes(resolvedFolder as never)) {
+      throw new BadRequestException('Thư mục upload không hợp lệ');
+    }
     const result = await this.storage.upload(file.buffer, {
-      folder: folder ?? 'misc',
+      folder: resolvedFolder,
       filename: file.originalname,
       contentType: file.mimetype,
     });
@@ -63,5 +74,21 @@ export class UploadsController {
     const safeName = dto.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
     const key = `${(dto.folder ?? 'misc').replace(/^\/|\/$/g, '')}/${nanoid()}-${safeName}`;
     return this.storage.presignUpload(key, dto.contentType);
+  }
+
+  @Delete()
+  @ApiOperation({
+    summary: 'Xoá 1 object đã upload (dùng để rollback khi lưu metadata lỗi)',
+  })
+  async remove(@Body('key') key?: string) {
+    if (!key) throw new BadRequestException('Thiếu key');
+    // Only allow deleting within whitelisted folders, so a caller can't wipe
+    // arbitrary objects in the bucket.
+    const folder = key.split('/')[0];
+    if (!ALLOWED_UPLOAD_FOLDERS.includes(folder as never)) {
+      throw new BadRequestException('Key không hợp lệ');
+    }
+    await this.storage.delete(key);
+    return { success: true };
   }
 }

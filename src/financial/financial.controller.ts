@@ -1,4 +1,10 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  DefaultValuePipe,
+  Get,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { FinancialService } from './financial.service';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
@@ -24,11 +30,12 @@ export class FinancialController {
   @ApiOperation({ summary: 'N kỳ gần nhất cho biểu đồ thu chi' })
   periods(
     @CurrentUser('accountId') accountId: string,
-    @Query('months') months?: string,
+    @Query('months', new DefaultValuePipe(6), ParseIntPipe) months: number,
     @Query('buildingId') buildingId?: string,
   ) {
-    const n = months ? parseInt(months, 10) : 6;
-    return this.service.periods(accountId, Number.isFinite(n) ? n : 6, buildingId);
+    // Clamp to a sane window so a caller can't request thousands of periods.
+    const n = Math.min(Math.max(months, 1), 24);
+    return this.service.periods(accountId, n, buildingId);
   }
 
   @Get('transactions')

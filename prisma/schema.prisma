@@ -427,6 +427,7 @@ model ApartmentFee {
   dueDate     DateTime? @map("due_date")
   paidAt      DateTime? @map("paid_at")
 
+  @@unique([apartmentId, period, name])
   @@index([apartmentId, period])
   @@map("apartment_fees")
 }

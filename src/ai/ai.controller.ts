@@ -7,6 +7,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Throttle, seconds } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import {
   ArrayMaxSize,
@@ -118,6 +119,7 @@ export class AiService {
 export class AiController {
   constructor(private readonly service: AiService) {}
 
+  @Throttle({ default: { limit: 20, ttl: seconds(60) } })
   @Post('chat')
   @ApiOperation({ summary: 'Hỏi đáp với trợ lý AI (Claude)' })
   chat(@Body() dto: ChatDto) {

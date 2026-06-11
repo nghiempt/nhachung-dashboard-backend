@@ -1,11 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
  * Resolves which building a request operates on. If the caller passes an
- * explicit buildingId, it is used (after membership is verified loosely);
- * otherwise the account's active membership wins, falling back to any
- * membership, then to the first building in the system.
+ * explicit buildingId, it is used only after verifying the account is a
+ * member of that building; otherwise the account's active membership wins,
+ * falling back to any membership, then to the first building in the system.
  */
 @Injectable()
 export class BuildingContextService {
@@ -13,7 +17,13 @@ export class BuildingContextService {
 
   async resolve(accountId: string, explicitBuildingId?: string): Promise<string> {
     if (explicitBuildingId) {
-      return explicitBuildingId;
+      const member = await this.prisma.accountBuilding.findFirst({
+        where: { accountId, buildingId: explicitBuildingId },
+      });
+      if (!member) {
+        throw new ForbiddenException('Không có quyền truy cập tòa nhà này');
+      }
+      return member.buildingId;
     }
     const active = await this.prisma.accountBuilding.findFirst({
       where: { accountId, isActive: true },
